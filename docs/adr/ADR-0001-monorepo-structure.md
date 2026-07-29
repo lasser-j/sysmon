@@ -7,8 +7,8 @@
 
 The project consists of two logically separable components:
 
-- `libconcurrent` — a reusable, platform-agnostic concurrency library
-- `sysmon` — a Linux system monitoring application that consumes `libconcurrent`
+- `libs/concurrent` — a reusable, platform-agnostic concurrency library
+- `sysmon` — a Linux system monitoring application that consumes `libs/concurrent`
 
 A third cross-cutting concern is the Yocto-based embedded Linux image for deployment on Raspberry Pi.
 
@@ -36,10 +36,10 @@ Each module owns its own CMake configuration and test suite.
 - A single CMake build graph covers all modules, toolchain files, and CI pipelines without cross-repo coordination.
 - Reviewers and potential employers can assess the full project with a single `git clone`.
 - The Yocto layer references specific library versions implicitly via the same tree — no submodule pinning required.
-- `libconcurrent` remains independently testable and benchmarkable. Its `CMakeLists.txt` exposes a clean `concurrent::concurrent` target without sysmon-specific dependencies.
+- `libs/concurrent` remains independently testable and benchmarkable. Its `CMakeLists.txt` exposes a clean `concurrent::concurrent` target without sysmon-specific dependencies.
 
 ## Consequences
 
 - All modules share the same CMake minimum version and C++ standard configuration.
-- Breaking changes to `libconcurrent`'s public API surface immediately in CI (compilation failure in dependent modules).
-- Splitting `libconcurrent` into a standalone repository in the future is straightforward, since the module boundary is already clean.
+- Breaking changes to `libs/concurrent`'s public API surface immediately in CI (compilation failure in dependent modules).
+- Splitting `libs/concurrent` into a standalone repository in the future is straightforward, since the module boundary is already clean.

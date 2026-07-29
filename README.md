@@ -18,7 +18,7 @@
 
 ## Features
 
-- **Runtime Library**
+- **Concurrency Library**
   - Reusable C++20 thread pool and one-shot periodic task scheduler
   - `std::jthread`-based workers with cooperative shutdown via `std::stop_token`
   - Thread-safe work queue with task submission
@@ -60,19 +60,20 @@ The project builds two independent binaries:
 - **`sysmon-ui`** - Qt/QML client, connects to the daemon via gRPC, runs on any machine
 
 ```mermaid
+%%{init: {'flowchart': {'curve': 'stepAfter'}}}%%
 flowchart LR
   subgraph "sysmon-daemon (Raspberry Pi)"
     MC["MonitorCore\nScheduler · ThreadPool"]
     MS["MetricStore"]
     GS["gRPC Server"]
-    MC-->|write| MS
-    GS-->|read| MS
+    MC -->|write| MS
+    GS -->|read| MS
   end
 
   subgraph "sysmon-ui (any machine)"
     GC["gRPC Client"]
     UI["Qt/QML UI"]
-    UI-->|uses| GC
+    UI -->|uses| GC
   end
 
   GS -->|"gRPC / HTTP2"| GC
@@ -105,6 +106,7 @@ See the corresponding files inside `docs/`:
 | Document | Description |
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | Architecture, module dependency graph and data flow |
+| [`docs/concurrent.md`](docs/concurrent.md) | libs/concurrent architecture and internals |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records |
 | [`docs/build.md`](docs/build.md) | Build, cross-compile, run and test |
 | [`docs/benchmarks.md`](docs/benchmarks.md) | Benchmark results and methodology |

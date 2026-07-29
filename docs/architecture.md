@@ -36,6 +36,7 @@ The project produces two independent binaries with a clear network boundary betw
 This separation gives gRPC a genuine architectural purpose: It is the network boundary between data collection and visualization, not an internal inter process communication mechanism.
 
 ```mermaid
+%%{init: {'flowchart': {'curve': 'stepAfter'}}}%%
 flowchart LR
   subgraph "sysmon-daemon (Raspberry Pi)"
     MC["MonitorCore\nScheduler · ThreadPool"]
