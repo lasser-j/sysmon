@@ -107,7 +107,9 @@ See the corresponding files inside `docs/`:
 | Document | Description |
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | Architecture, module dependency graph and data flow |
+| [`docs/concurrent.md`](docs/concurrent.md) | libs/concurrent architecture and internals |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records |
+| [`docs/build.md`](docs/build.md) | Build, test and benchmark |
 
 ## Status
 

@@ -25,6 +25,9 @@ See [`docs/adr/`](adr/) for the full rationale behind each decision.
 | Decision | Choice | ADR |
 |---|---|---|
 | Repository structure | Monorepo | [ADR-0001](adr/ADR-0001-monorepo-structure.md) |
+| ThreadPool queue | Single shared queue (mutex + condition variable) | [ADR-0002](adr/ADR-0002-threadpool-queue-strategy.md) |
+| Thread management | `std::jthread` + `std::stop_token` | [ADR-0003](adr/ADR-0003-jthread-stop-token.md) |
+| Scheduling | Separate `Scheduler` class | [ADR-0004](adr/ADR-0004-scheduler-design.md) |
 
 ## System Architecture
 
