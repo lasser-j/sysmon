@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.25)
 # add_library produces a linkable library, not a standalone binary.
 # sysmon-daemon links against concurrent::concurrent as a dependency.
 add_library(concurrent STATIC
-    #src/ThreadPool.cpp
+    src/ThreadPool.cpp
     #src/Scheduler.cpp
 )
 

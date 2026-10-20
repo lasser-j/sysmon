@@ -50,6 +50,7 @@ apps/sysmon-ui     --> logging
 - **Files:** PascalCase, named after the primary class they contain (e.g. `ThreadPool.hpp`, `ThreadPool.cpp`, `CpuReaderTest.cpp`). Exception: `main.cpp`
 - **CMake functions:** snake_case (consistent with CMake stdlib)
 - **No trailing underscores** on member variables
+- **Code comments:** No artificial line breaks mid-sentence; split into two sentences instead, but do not shorten sentences artificially either. Long lines are fine
 
 ## Markdown Conventions
 

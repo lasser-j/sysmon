@@ -15,7 +15,7 @@ Each worker has a local deque. Idle workers steal tasks from the back of busy wo
 
 ## Decision
 
-**Option A - Single shared MPMC queue** using `std::deque<Task>` + `std::mutex` + `std::condition_variable_any`.
+**Option A - Single shared MPMC queue** using `std::queue<Task>` + `std::mutex` + `std::condition_variable_any`.
 
 ## Rationale
 

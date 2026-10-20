@@ -19,7 +19,7 @@ The two components are intentionally decoupled: `ThreadPool` knows nothing about
 flowchart TD
     S["submit(callable)"]
     %% used &nbsp; instead of blank space to force the text on the same line
-    Q["std::mutex m_queueMutex\nstd::deque&lt;Task&gt;&nbsp;m_taskQueue"]
+    Q["std::mutex m_queueMutex\nstd::queue&lt;Task&gt;&nbsp;m_taskQueue"]
     W["std::jthread&nbsp;m_workers[0..N]\neach&nbsp;runs&nbsp;workerLoop(stop_token)"]
 
     S -->|"lock, enqueue, notify_one()"| Q
@@ -67,7 +67,7 @@ The min-heap is ordered by `nextRun` (`steady_clock::time_point`) - the soonest 
 
 | Structure | Lives in | Ordered by | Purpose |
 |---|---|---|---|
-| `std::deque<Task> m_taskQueue` | `ThreadPool` | Insertion order (FIFO) | Which worker executes next |
+| `std::queue<Task> m_taskQueue` | `ThreadPool` | Insertion order (FIFO) | Which worker executes next |
 | min-heap `m_heap` | `Scheduler` | Execution time (`nextRun`) | When to submit to the pool |
 
 When a task becomes due, the scheduler removes it from the heap and calls `m_pool.submit()`, transferring it into the ThreadPool's FIFO queue.

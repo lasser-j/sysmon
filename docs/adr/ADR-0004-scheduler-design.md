@@ -29,7 +29,7 @@ Add `submitPeriodic(interval, callback)` directly to `ThreadPool`.
 
 Two separate data structures serve two separate purposes:
 
-- **`ThreadPool`** holds a FIFO `std::deque<Task>` - tasks waiting for a free worker thread. No timing involved.
+- **`ThreadPool`** holds a FIFO `std::queue<Task>` - tasks waiting for a free worker thread. No timing involved.
 - **`Scheduler`** holds a min-heap (`std::priority_queue` with `std::greater`) of `ScheduledTask` entries keyed on `nextRun` (`std::chrono::steady_clock::time_point`). The heap is ordered by execution time, not by importance - the earliest due task is always at the top.
 
 When a task becomes due, the scheduler calls `pool.submit(callback)`, moving it from the timing heap into the ThreadPool queue for execution.
