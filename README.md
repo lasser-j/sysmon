@@ -126,3 +126,7 @@ See the corresponding files inside `docs/`:
 - [ ] `apps/sysmon-daemon` - MonitorCore, wiring
 - [ ] `apps/sysmon-ui` - Qt/QML client
 - [ ] `yocto/meta-sysmon` - aarch64 recipe + QEMU
+
+## AI-Assisted Development
+
+This project is developed with Claude Code as an assistant for implementation, code review and test design. Architecture and design decisions (see [`docs/architecture.md`](docs/architecture.md) and [`docs/adr/`](docs/adr/)) are made by the developer, and every step is reviewed and committed manually. The context given to the agent is in [`CLAUDE.md`](CLAUDE.md).
