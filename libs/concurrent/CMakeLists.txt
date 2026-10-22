@@ -3,10 +3,14 @@ cmake_minimum_required(VERSION 3.25)
 # Library target
 # add_library produces a linkable library, not a standalone binary.
 # sysmon-daemon links against concurrent::concurrent as a dependency.
-add_library(concurrent STATIC
-    src/ThreadPool.cpp
-    #src/Scheduler.cpp
+# The source list is kept in a variable because the tests compile the same sources a second time with sanitizer flags (see tests/CMakeLists.txt).
+# Absolute paths are required so the list can be used from other directories.
+set(CONCURRENT_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadPool.cpp
+    #${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduler.cpp
 )
+
+add_library(concurrent STATIC ${CONCURRENT_SOURCES})
 
 add_library(concurrent::concurrent ALIAS concurrent)
 

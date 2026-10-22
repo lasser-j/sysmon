@@ -56,13 +56,15 @@ apps/sysmon-ui     --> logging
 
 - No horizontal rules (`---`)
 - No em-dashes (`—`), use regular hyphens (`-`)
-- No artificial line breaks mid-sentence
+- No artificial line breaks: a paragraph is one single line, also between sentences
 - Mermaid for all diagrams
 
 ## Testing
 
 - Framework: GoogleTest
-- Test targets are built with ASan + UBSan (via `target_enable_sanitizers()` in cmake/CompilerOptions.cmake)
+- Test targets are built with ASan + UBSan by default, or with TSan via `-DSANITIZER=thread` in a separate build directory (via `target_enable_sanitizers()` in cmake/CompilerOptions.cmake)
+- Sanitizer flags only affect the files a target compiles itself, so each module's tests link against a second build of the library sources with the flags (e.g. `concurrent_sanitized`) instead of the regular library target
+- Tests do not use sleeps for synchronization, they use latches and futures
 - Each module has its own tests/ subdirectory with its own CMakeLists.txt
 - Benchmarks use Google Benchmark
 
@@ -83,21 +85,38 @@ Planned module order:
 
 ## Build and Test Commands
 
+### Development build (tests + benchmarks, ASan + UBSan)
+
 ```bash
-# Development build (tests + benchmarks)
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 
-# Production build (no tests, no benchmarks)
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_BENCHMARKS=OFF
-cmake --build build --parallel
-
-# Run all tests
+# All tests
 ctest --test-dir build --output-on-failure
 
-# Run specific module tests
+# Single module
 ctest --test-dir build -R concurrent --output-on-failure
+```
 
-# Run benchmarks
+### ThreadSanitizer build
+
+Separate directory, because ASan and TSan cannot be combined. On WSL2, prefix the build and the ctest call with `setarch -R`.
+
+```bash
+cmake -B build-tsan -DCMAKE_BUILD_TYPE=Debug -DSANITIZER=thread
+cmake --build build-tsan --parallel
+ctest --test-dir build-tsan --output-on-failure
+```
+
+### Production build (no tests, no benchmarks)
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_BENCHMARKS=OFF
+cmake --build build --parallel
+```
+
+### Benchmarks
+
+```bash
 ./build/libs/concurrent/benchmarks/concurrent_benchmarks
 ```
