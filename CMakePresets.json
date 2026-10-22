@@ -1,0 +1,58 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Development (Debug, ASan + UBSan)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SANITIZER": "address",
+        "BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "tsan",
+      "displayName": "Development (Debug, TSan)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SANITIZER": "thread",
+        "BUILD_BENCHMARKS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

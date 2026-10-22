@@ -85,17 +85,19 @@ Planned module order:
 
 ## Build and Test Commands
 
-### Development build (tests + benchmarks, ASan + UBSan)
+CMakePresets.json defines the `dev` and `tsan` presets with the Ninja generator. They were added for VS Code (CMake Tools), where they appear as selectable configurations, and they work the same in the terminal.
+
+### Development build (ASan + UBSan)
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
+cmake --preset dev
+cmake --build --preset dev --parallel
 
 # All tests
-ctest --test-dir build --output-on-failure
+ctest --preset dev
 
 # Single module
-ctest --test-dir build -R concurrent --output-on-failure
+ctest --preset dev -R concurrent
 ```
 
 ### ThreadSanitizer build
@@ -103,15 +105,15 @@ ctest --test-dir build -R concurrent --output-on-failure
 Separate directory, because ASan and TSan cannot be combined. On WSL2, prefix the build and the ctest call with `setarch -R`.
 
 ```bash
-cmake -B build-tsan -DCMAKE_BUILD_TYPE=Debug -DSANITIZER=thread
-cmake --build build-tsan --parallel
-ctest --test-dir build-tsan --output-on-failure
+cmake --preset tsan
+cmake --build --preset tsan --parallel
+ctest --preset tsan
 ```
 
 ### Production build (no tests, no benchmarks)
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_BENCHMARKS=OFF
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_BENCHMARKS=OFF
 cmake --build build --parallel
 ```
 
