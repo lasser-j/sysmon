@@ -31,7 +31,7 @@ jobs:
       CXX: ${{ matrix.cxx }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
       - name: Build
@@ -47,7 +47,7 @@ jobs:
       CXX: g++-13
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Configure
         run: cmake --preset release
       - name: Build
