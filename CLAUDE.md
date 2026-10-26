@@ -119,6 +119,10 @@ cmake --build build --parallel
 
 ### Benchmarks
 
+The `release` preset builds only the benchmarks (Release, no tests) into `build-release/`. The `dev` and `tsan` presets set `BUILD_BENCHMARKS=OFF`, because timings from sanitized Debug builds are not representative.
+
 ```bash
-./build/libs/concurrent/benchmarks/concurrent_benchmarks
+cmake --preset release
+cmake --build --preset release --parallel
+./build-release/libs/concurrent/benchmarks/concurrent_benchmarks
 ```

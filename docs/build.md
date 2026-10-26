@@ -34,7 +34,7 @@ cmake -B build \
 
 ### Development build
 
-Builds the libraries with tests, which run with ASan + UBSan. The `dev` and `tsan` presets in `CMakePresets.json` were added for VS Code (see below) and work the same in the terminal. They switch the benchmarks off until the benchmark module exists:
+Builds the libraries with tests, which run with ASan + UBSan. The `dev` and `tsan` presets in `CMakePresets.json` were added for VS Code (see below) and work the same in the terminal. They switch the benchmarks off, because timings from a sanitized Debug build are not representative (see Benchmarks below):
 
 ```bash
 cmake --preset dev
@@ -87,10 +87,16 @@ The tests do not use sleeps for synchronization. They coordinate through latches
 
 ## Benchmarks
 
-Benchmarks should be run from a Release build, since Debug timings are not representative:
+Benchmarks should be run from a Release build, since Debug timings are not representative. The `release` preset builds only the benchmarks (no tests) into `build-release/`:
 
 ```bash
-cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-release --parallel
+cmake --preset release
+cmake --build --preset release --parallel
 ./build-release/libs/concurrent/benchmarks/concurrent_benchmarks
+```
+
+The benchmarks link the regular `concurrent::concurrent` library and never the sanitized copy. Google Benchmark options select a subset or repeat runs for more stable numbers:
+
+```bash
+./build-release/libs/concurrent/benchmarks/concurrent_benchmarks --benchmark_filter=Scaling --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
 ```

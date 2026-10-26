@@ -14,7 +14,19 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "SANITIZER": "address",
+        "BUILD_TESTING": "ON",
         "BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Benchmarks (Release, no tests)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "BUILD_BENCHMARKS": "ON"
       }
     },
     {
@@ -25,6 +37,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "SANITIZER": "thread",
+        "BUILD_TESTING": "ON",
         "BUILD_BENCHMARKS": "OFF"
       }
     }
@@ -37,6 +50,10 @@
     {
       "name": "tsan",
       "configurePreset": "tsan"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
     }
   ],
   "testPresets": [
