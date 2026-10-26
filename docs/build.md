@@ -5,7 +5,7 @@
 | Tool | Minimum version |
 |---|---|
 | CMake | 3.25 |
-| GCC or Clang | 12 or 15 respectively (C++20 required) |
+| GCC or Clang | C++20 required, CI tests GCC 13 and Clang 18 |
 | Ninja | any recent (generator used by the CMake presets and all build commands) |
 | Git | any recent |
 
