@@ -5,15 +5,15 @@
 ![gRPC](https://img.shields.io/badge/gRPC-Protobuf-4285F4?style=flat&logo=google&logoColor=white)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?style=flat&logo=qt&logoColor=white)
 
-![GoogleTest](https://img.shields.io/badge/GoogleTest-planned-4285F4?style=flat&logo=google&logoColor=white)
-![Google Benchmark](https://img.shields.io/badge/Benchmark-planned-4285F4?style=flat&logo=google&logoColor=white)
+![GoogleTest](https://img.shields.io/badge/GoogleTest-1.17.0-4285F4?style=flat&logo=google&logoColor=white)
+![Google Benchmark](https://img.shields.io/badge/Benchmark-1.9.5-4285F4?style=flat&logo=google&logoColor=white)
 ![spdlog](https://img.shields.io/badge/Logging-spdlog-informational)
 
 ![Yocto](https://img.shields.io/badge/Yocto-meta--sysmon-5c9a3e)
 ![Embedded](https://img.shields.io/badge/Embedded-aarch64-informational)
 ![QEMU](https://img.shields.io/badge/QEMU-aarch64-FF6600?style=flat&logo=qemu&logoColor=white)
 
-![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat&logo=githubactions&logoColor=white)
+[![CI](https://github.com/lasser-j/sysmon/actions/workflows/ci.yml/badge.svg)](https://github.com/lasser-j/sysmon/actions/workflows/ci.yml)
 
 **SysMon** is a modern C++20 Linux system monitoring application. It demonstrates systems programming by building a reusable C++20 concurrency library, modular software architecture and infrastructure oriented design. The target for this project is aarch64 embedded Linux (as used on devices such as Raspberry Pi), cross-compiled via Yocto and tested in QEMU.
 
@@ -116,16 +116,16 @@ See the corresponding files inside `docs/`:
 > **Work in progress.** This section tracks implementation status.
 
 - [x] Repository bootstrap
-- [ ] `libs/concurrent` - ThreadPool
+- [x] `libs/concurrent` - ThreadPool
 - [ ] `libs/concurrent` - Scheduler
-- [ ] CI - GitHub Actions (build, test, cross-compile)
+- [x] CI - GitHub Actions (build, test)
 - [ ] `libs/sysmon-types` - MetricSnapshot, interfaces
 - [ ] `logging` - structured logger
 - [ ] `platform` - CpuReader, RamReader, ProcessReader
 - [ ] `transport` - proto definition, gRPC service
 - [ ] `apps/sysmon-daemon` - MonitorCore, wiring
 - [ ] `apps/sysmon-ui` - Qt/QML client
-- [ ] `yocto/meta-sysmon` - aarch64 recipe + QEMU
+- [ ] `yocto/meta-sysmon` - aarch64 recipe + QEMU, cross-compile in CI
 
 ## AI-Assisted Development
 
