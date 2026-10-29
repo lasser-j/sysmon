@@ -50,6 +50,8 @@ apps/sysmon-ui     --> logging
 - **Files:** PascalCase, named after the primary class they contain (e.g. `ThreadPool.hpp`, `ThreadPool.cpp`, `CpuReaderTest.cpp`). Exception: `main.cpp`
 - **CMake functions:** snake_case (consistent with CMake stdlib)
 - **No trailing underscores** on member variables
+- **Const-correctness:** Use `const` on member functions that do not modify the object, on reference and pointer parameters that are not modified, and on locals and members that do not change after initialization. By-value parameters that are neither modified nor moved from are `const` in the definition (`.cpp`) but not in the declaration (header), because the top-level `const` is not part of the signature. Parameters that are passed on with `std::move` stay non-const
+- **Initialization:** Use braces for default member initializers (e.g. `TaskId m_nextId{1};`). A value that is the same in every constructor is a default member initializer in the header and not part of the constructor's initializer list
 - **Code comments:** No artificial line breaks mid-sentence; split into two sentences instead, but do not shorten sentences artificially either. Long lines are fine
 
 ## Markdown Conventions

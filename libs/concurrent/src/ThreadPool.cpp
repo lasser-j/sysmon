@@ -4,7 +4,7 @@
 
 namespace concurrent {
 
-ThreadPool::ThreadPool(std::size_t threadCount) {
+ThreadPool::ThreadPool(const std::size_t threadCount) {
     const std::size_t count = std::max<std::size_t>(threadCount, 1);
     m_workers.reserve(count);
     for (std::size_t i = 0; i < count; ++i) {
@@ -32,7 +32,7 @@ void ThreadPool::enqueue(Task task) {
     m_queueCv.notify_one();
 }
 
-void ThreadPool::workerLoop(std::stop_token stopToken) {
+void ThreadPool::workerLoop(const std::stop_token stopToken) {
     while (true) {
         Task task;
         {
