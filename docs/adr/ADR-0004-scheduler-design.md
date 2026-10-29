@@ -36,6 +36,8 @@ Two separate data structures serve two separate purposes:
 
 Each scheduled task has one shared state (`TaskState`, held by `std::shared_ptr`) with the callback, the interval (zero for one-shot tasks), the cancellation state and whether a run is in progress. The heap entries and the callables submitted to the pool point to this same state. In this document these submitted callables are called wrappers. Besides the heap, `Scheduler` keeps a map of all active tasks, indexed by `TaskId`, which is used by `cancel()`, and its entries point to the same state as well.
 
+A single time-ordered structure (e.g. `std::set`) was rejected, because `cancel()` only knows the id and would need a linear search or a second index that must be updated whenever a periodic task is re-inserted. Heap and map keep insertion and removal logarithmic and `cancel()` constant, at the cost that cancelled entries stay in the heap until they reach the top.
+
 When a task becomes due, the scheduler does not submit the user's task directly. It calls `pool.submit(wrapper)`, where the wrapper is a small callable that checks cancellation and whether the previous run is still active, catches exceptions and then calls the user's task. Submitting the wrapper moves the task from the timing heap into the ThreadPool queue for execution. The wrapper captures only the shared `TaskState`, never the `Scheduler` itself.
 
 ```
@@ -95,7 +97,7 @@ If the previous run of a task has not finished when its next tick is due, the ti
 
 - `cancel(id)` removes the id from the active map and requests stop on the `std::stop_source` of the shared state. It never waits for anything.
 - The wrapper checks `stop_requested()` directly before calling the callback, so a run of a periodic task that was already submitted to the pool but has not started yet is not executed either.
-- Once a one-shot task has been dispatched, it is no longer active. `cancel()` then returns `false`, and the run that is already waiting in the pool queue still happens.
+- Once a one-shot task has been dispatched, it is no longer active. `cancel()` then returns `false`, and the run that is already waiting in the pool queue still happens. Making this cancellable too would need a way to remove finished one-shot tasks from the active tasks without the wrapper referring to the scheduler, for example a finished flag in the shared state that the scheduler cleans up lazily.
 - A callback that is already running when `cancel()` is called is not interrupted, there is no way to do so. `cancel()` returns before the callback finishes. A caller who needs to know that the callback is done must provide that synchronisation itself, for example with a latch or by owning the captured state through a `shared_ptr`.
 - Cancelling a periodic task from inside its own callback is allowed.
 - Per-task cancellation uses a `std::stop_source` and not an `atomic<bool>`, because `std::stop_token` is the standard mechanism for cooperative cancellation in C++20. It also leaves room for a later extension that hands the token to the task. The cost is one small allocation per scheduled task, which is negligible at the low scheduling rate (see ADR-0002). This stop source is unrelated to the stop token of the scheduler thread, which only signals the destruction of the whole scheduler.
