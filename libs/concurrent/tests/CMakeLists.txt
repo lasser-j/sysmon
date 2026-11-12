@@ -12,6 +12,7 @@ target_set_warnings(concurrent_sanitized PRIVATE)
 target_enable_sanitizers(concurrent_sanitized PUBLIC)
 
 add_executable(concurrent_tests
+    SchedulerTest.cpp
     ThreadPoolTest.cpp
 )
 

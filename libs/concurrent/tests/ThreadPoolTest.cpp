@@ -1,5 +1,8 @@
 #include "concurrent/ThreadPool.hpp"
 
+#include "support/Gate.hpp"
+#include "support/WorkerBlocker.hpp"
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -13,6 +16,8 @@
 #include <vector>
 
 using concurrent::ThreadPool;
+using concurrent::test::Gate;
+using concurrent::test::WorkerBlocker;
 using testing::StrEq;
 using testing::ThrowsMessage;
 
@@ -24,47 +29,6 @@ constexpr std::size_t kBusyPoolWorkers = 4;  // enough contention for the stress
 
 // Synchronization uses only latches and futures, never sleeps, so the tests are deterministic and free of data races (TSan-clean).
 // A deadlock caused by a pool bug is caught by the ctest timeout.
-
-/// A one-shot gate that blocks any number of waiters until open() is called.
-class Gate {
-public:
-    /// Must be called at most once, a second call would count the underlying latch below zero, which is undefined behavior.
-    void open() { m_latch.count_down(); }
-    void wait() { m_latch.wait(); }
-
-private:
-    std::latch m_latch{1};
-};
-
-/// Occupies a single-threaded pool's only worker until release() is called.
-/// After construction the worker is guaranteed to be inside the blocking task, so everything submitted afterwards stays queued.
-///
-/// Two one-shot gates signal in opposite directions:
-///   m_started: worker -> test, "the blocking task is running and has left the queue", awaited by the constructor.
-///   m_release: test -> worker, "you may finish now", opened by release().
-/// The constructor cannot wait on m_release instead of m_started, because release() is only called after the constructor has returned, which would deadlock the test thread.
-/// It also cannot rely on m_done, because that future becomes ready only after the task has finished, i.e. after m_release was opened.
-class WorkerBlocker {
-public:
-    explicit WorkerBlocker(ThreadPool& pool) {
-        m_done = pool.submit([this] {
-            // Must come before the release wait, otherwise the constructor would wait for a signal that is only sent after it returns.
-            m_started.open();
-            m_release.wait();
-        });
-        // Without this wait the blocker could still sit in the queue and be counted by pendingTasks().
-        // If the worker was faster than this thread, the gate is already open and wait() returns immediately.
-        m_started.wait();
-    }
-
-    void release() { m_release.open(); }
-    void waitUntilDone() { m_done.get(); }
-
-private:
-    Gate m_started;
-    Gate m_release;
-    std::future<void> m_done;
-};
 
 } // namespace
 
@@ -266,7 +230,6 @@ TEST(ThreadPoolTest, PendingTasksCountsQueuedButNotRunningTasks) {
     EXPECT_EQ(pool.pendingTasks(), kQueuedTasks);
 
     blocker.release();
-    blocker.waitUntilDone();
     for (auto& future : futures) {
         future.get();
     }
