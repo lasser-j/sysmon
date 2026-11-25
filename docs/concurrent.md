@@ -9,7 +9,7 @@
 | `ThreadPool` | Manages worker threads and executes submitted callables |
 | `Scheduler` | Tracks timing and dispatches due tasks to a `ThreadPool` |
 
-The two components are intentionally decoupled: `ThreadPool` knows nothing about time, and `Scheduler` knows nothing about thread management.
+The two components are intentionally decoupled: `ThreadPool` knows nothing about time, and `Scheduler` knows nothing about thread management. The `Scheduler` gets the current time and does its waiting through a small interface, `TimeSource`, which is injected from outside and can therefore be replaced. `SteadyTimeSource` is the implementation for real time.
 
 ## ThreadPool
 
@@ -59,7 +59,7 @@ flowchart TD
     P["ThreadPool\nm_pool.submit(wrapper)"]
 
     SO -->|"lock, push, notify_one()"| H
-    H -->|"condition_variable_any::wait_until()"| SL
+    H -->|"TimeSource::waitUntil()"| SL
     SL -->|"due tasks, mutex released"| P
 ```
 
@@ -78,7 +78,11 @@ When a task becomes due, the scheduler removes it from the heap and calls `m_poo
 
 ### Waiting with stop_token
 
-The scheduler thread uses the `std::stop_token` overloads of `condition_variable_any`: `wait()` while the heap is empty, like the workers of the `ThreadPool`, and `wait_until()` while it waits for the next deadline. A new task with an earlier `nextRun` wakes the thread so that it recomputes the deadline. After every wake-up the loop checks the stop token and the clock itself and does not rely on the return value of the wait.
+The scheduler thread uses the `std::stop_token` overloads of `condition_variable_any`: `wait()` while the heap is empty, like the workers of the `ThreadPool`, and `wait_until()` while it waits for the next deadline. Both calls go through the injected `TimeSource`, which for real time is `SteadyTimeSource` and simply forwards them. A new task with an earlier `nextRun` wakes the thread so that it recomputes the deadline. After every wake-up the loop checks the stop token and the clock itself and does not rely on the return value of the wait.
+
+### Injected Time
+
+The scheduler does not call `steady_clock` directly. A `TimeSource` provides `now()` and the two waits. The constructor `Scheduler(ThreadPool&, TimeSource&)` requires one, like the pool, and a `SteadyTimeSource` is the real one. Tests pass a fake time source to control the time (`libs/concurrent/tests/support/`). The waiting is part of `TimeSource`, because a fake has to wake the scheduler thread itself. See ADR-0004 for the reasoning.
 
 ### Mutex Release Before submit()
 
@@ -98,9 +102,9 @@ The wrapper catches and discards all exceptions of the callback, a periodic task
 
 ### Lifetime Rule
 
-`Scheduler` holds a non-owning reference (`ThreadPool&`) to the pool. The `ThreadPool` must outlive the `Scheduler`. In `MonitorCore`, the `ThreadPool` is declared before the `Scheduler` - member destructors run in reverse declaration order, so the `Scheduler` is always destroyed first.
+`Scheduler` holds non-owning references to the pool (`ThreadPool&`) and the `TimeSource`. Both must outlive the `Scheduler`. In `MonitorCore`, the `ThreadPool` is declared before the `Scheduler` - member destructors run in reverse declaration order, so the `Scheduler` is always destroyed first.
 
-The destructor stops and joins the scheduler thread, entries still in the heap are discarded. Tasks already submitted to the pool are not affected, because the wrapper holds only the shared `TaskState` and not the `Scheduler`.
+The destructor stops and joins the scheduler thread, entries still in the heap are discarded. Tasks already submitted to the pool are not affected, because the wrapper holds only the shared `TaskState` and not the `Scheduler`. A callback that captures the `Scheduler` itself, for example to call `cancel()`, must not run after the `Scheduler` is destroyed, and the caller has to ensure that.
 
 ## Thread Safety Summary
 

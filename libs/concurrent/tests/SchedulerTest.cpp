@@ -1,5 +1,7 @@
 #include "concurrent/Scheduler.hpp"
 
+#include "concurrent/SteadyTimeSource.hpp"
+
 #include "support/Gate.hpp"
 #include "support/RunCounter.hpp"
 #include "support/WorkerBlocker.hpp"
@@ -19,20 +21,21 @@
 #include <vector>
 
 using concurrent::Scheduler;
+using concurrent::SteadyTimeSource;
 using concurrent::TaskId;
 using concurrent::ThreadPool;
 using concurrent::test::Gate;
 using concurrent::test::RunCounter;
 using concurrent::test::WorkerBlocker;
-using Clock = Scheduler::Clock;
+using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
 // Conventions of this file
 //
 // Scope: These are integration tests, the scheduler runs against a real ThreadPool and the real steady_clock.
-// Unit tests with a fake clock and a fake executor are planned once both can be injected.
+// The scheduler accepts a fake time source now (see tests/support/), unit tests that use it are planned.
 //
-// Time: The clock is not injectable, so the tests use real but short intervals.
+// Time: These tests pass a SteadyTimeSource, i.e. the real clock, so they use real but short intervals.
 // Time is only ever checked against lower bounds ("not before the delay"), never against upper bounds, so a slow CI machine can delay a test but not fail it.
 //
 // Waiting: Tests wait on latches, futures and gates, never on sleeps.
@@ -46,6 +49,9 @@ using namespace std::chrono_literals;
 // The scheduler is destroyed first, then the pool drains its queue, and only then the data goes away.
 
 namespace {
+
+/// The real time for every scheduler in this file. It has no state, so sharing it is safe.
+SteadyTimeSource realTime;
 
 constexpr std::size_t kSingleWorker = 1;     // required for ordering and queue-state tests, the pool queue is FIFO and the blocker occupies the only worker
 constexpr std::size_t kBusyPoolWorkers = 4;  // enough parallelism for the overlap and stress tests
@@ -96,7 +102,7 @@ TEST(SchedulerTest, ScheduleOnceRunsExactlyOnceNotBeforeDelay) {
     int runs{0};
     std::promise<Clock::time_point> ranAt;
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const auto start = Clock::now();
     scheduler.scheduleOnce(kDelay, [&] {
@@ -113,7 +119,7 @@ TEST(SchedulerTest, ScheduleOnceRunsExactlyOnceNotBeforeDelay) {
 TEST(SchedulerTest, ZeroAndNegativeDelayAreDueImmediately) {
     RunCounter runs(3);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     scheduler.scheduleOnce(0ms, [&] { runs.hit(); });
     scheduler.scheduleOnce(-1ms, [&] { runs.hit(); });
@@ -124,7 +130,7 @@ TEST(SchedulerTest, ZeroAndNegativeDelayAreDueImmediately) {
 
 TEST(SchedulerTest, IdsAreUniqueAndIncreasing) {
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId first = scheduler.scheduleOnce(kNever, [] {});
     const TaskId second = scheduler.schedulePeriodic(kNever, [] {});
@@ -145,7 +151,7 @@ TEST(SchedulerTest, PeriodicFirstRunIsOneIntervalAfterTheCallAndRunsRepeatedly) 
     std::size_t runs{0};
     RunCounter reached(kRuns);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const auto start = Clock::now();
     const TaskId id = scheduler.schedulePeriodic(kInterval, [&] {
@@ -169,7 +175,7 @@ TEST(SchedulerTest, PeriodicFirstRunIsOneIntervalAfterTheCallAndRunsRepeatedly) 
 TEST(SchedulerTest, CancelStopsFurtherPeriodicRuns) {
     RunCounter runs(3);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.schedulePeriodic(kShortInterval, [&] { runs.hit(); });
     runs.waitUntilReached();
@@ -189,7 +195,7 @@ TEST(SchedulerTest, CancelStopsFurtherPeriodicRuns) {
 TEST(SchedulerTest, CancelOfActiveOneShotReturnsTrue) {
     std::atomic<int> runs{0};
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.scheduleOnce(kNever, [&] { ++runs; });
 
@@ -199,7 +205,7 @@ TEST(SchedulerTest, CancelOfActiveOneShotReturnsTrue) {
 
 TEST(SchedulerTest, CancelOfActivePeriodicReturnsTrue) {
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.schedulePeriodic(kNever, [] {});
 
@@ -208,7 +214,7 @@ TEST(SchedulerTest, CancelOfActivePeriodicReturnsTrue) {
 
 TEST(SchedulerTest, CancelOfUnknownIdReturnsFalse) {
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
     const TaskId id = scheduler.scheduleOnce(kNever, [] {});
 
     EXPECT_FALSE(scheduler.cancel(0));
@@ -217,7 +223,7 @@ TEST(SchedulerTest, CancelOfUnknownIdReturnsFalse) {
 
 TEST(SchedulerTest, CancelOfAlreadyCancelledTaskReturnsFalse) {
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
     const TaskId once = scheduler.scheduleOnce(kNever, [] {});
     const TaskId periodic = scheduler.schedulePeriodic(kNever, [] {});
 
@@ -231,7 +237,7 @@ TEST(SchedulerTest, CancelOfAlreadyCancelledTaskReturnsFalse) {
 TEST(SchedulerTest, CancelOfDispatchedOneShotReturnsFalse) {
     RunCounter ran(1);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.scheduleOnce(0ms, [&] { ran.hit(); });
     ran.waitUntilReached();
@@ -242,7 +248,7 @@ TEST(SchedulerTest, CancelOfDispatchedOneShotReturnsFalse) {
 TEST(SchedulerTest, PeriodicTaskStaysActiveAfterDispatch) {
     RunCounter runs(1);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.schedulePeriodic(kShortInterval, [&] { runs.hit(); });
     runs.waitUntilReached();
@@ -254,7 +260,7 @@ TEST(SchedulerTest, DispatchedOneShotStillWaitingInPoolQueueRunsDespiteCancel) {
     RunCounter ran(1);
     ThreadPool pool(kSingleWorker);
     WorkerBlocker blocker(pool);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.scheduleOnce(0ms, [&] { ran.hit(); });
     waitUntilAtLeastQueued(pool, 1);
@@ -268,7 +274,7 @@ TEST(SchedulerTest, PeriodicRunWaitingInPoolQueueIsSkippedAfterCancel) {
     int runs{0};
     ThreadPool pool(kSingleWorker);
     WorkerBlocker blocker(pool);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.schedulePeriodic(kShortInterval, [&] { ++runs; });
     waitUntilAtLeastQueued(pool, 1);
@@ -286,7 +292,7 @@ TEST(SchedulerTest, CancelDoesNotWaitForOrInterruptARunningCallback) {
     Gate release;
     Gate done;
     ThreadPool pool(2);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.schedulePeriodic(kShortInterval, [&] {
         if (runs++ == 0) {
@@ -314,7 +320,7 @@ TEST(SchedulerTest, PeriodicTaskCanCancelItselfFromItsOwnCallback) {
     std::promise<bool> selfCancelResult;
     int runs{0};
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.schedulePeriodic(kShortInterval, [&] {
         if (runs++ == 0) {
@@ -345,7 +351,7 @@ TEST(SchedulerTest, SlowPeriodicTaskNeverOverlapsWithItself) {
     RunCounter laterRuns(kRunsAfterRelease);
     RunCounter clockTicks(kTicksWhileBlocked);
     ThreadPool pool(kBusyPoolWorkers);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     // The slow task is due every interval, but its first run blocks. Without the skip, the other workers would start further runs in parallel.
     const TaskId slow = scheduler.schedulePeriodic(kShortInterval, [&] {
@@ -380,7 +386,7 @@ TEST(SchedulerTest, DISABLED_PeriodicTaskDoesNotBurstAfterThePoolWasBlocked) {
     std::size_t runs{0};
     ThreadPool pool(kSingleWorker);
     WorkerBlocker blocker(pool);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.schedulePeriodic(kShortInterval, [&] { ++runs; });
     waitUntilAtLeastQueued(pool, kMissedSlots);
@@ -397,7 +403,7 @@ TEST(SchedulerTest, TasksRunInOrderOfDueTimeNotInsertionOrder) {
     std::vector<int> order;  // only touched by the single worker until the counter has been reached
     RunCounter runs(3);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     scheduler.scheduleOnce(150ms, [&] { order.push_back(1); runs.hit(); });
     scheduler.scheduleOnce(50ms, [&] { order.push_back(2); runs.hit(); });
@@ -411,7 +417,7 @@ TEST(SchedulerTest, EarlierTaskInsertedLaterBecomesDueBeforeAWaitingLaterTask) {
     bool laterTaskRan{false};
     std::promise<bool> earlierTaskSawLaterTask;
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     // The scheduler thread sleeps until the far deadline. The new task has to wake it, otherwise this test hangs until the ctest timeout.
     const TaskId later = scheduler.scheduleOnce(kNever, [&] { laterTaskRan = true; });
@@ -429,7 +435,7 @@ TEST(SchedulerTest, TasksWithEqualDelayAreDispatchedInSchedulingOrder) {
     RunCounter runs(kTaskCount);
     ThreadPool pool(kSingleWorker);
     WorkerBlocker blocker(pool);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     for (std::size_t i = 0; i < kTaskCount; ++i) {
         scheduler.scheduleOnce(0ms, [i, &order, &runs] {
@@ -452,7 +458,7 @@ TEST(SchedulerTest, TasksWithEqualDelayAreDispatchedInSchedulingOrder) {
 TEST(SchedulerTest, PeriodicTaskKeepsRunningAfterExceptions) {
     RunCounter runs(3);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     // Reaching the third run shows that the task stays scheduled and that the running flag is reset after the exception, otherwise all later ticks would be skipped.
     const TaskId id = scheduler.schedulePeriodic(kShortInterval, [&] {
@@ -467,7 +473,7 @@ TEST(SchedulerTest, PeriodicTaskKeepsRunningAfterExceptions) {
 TEST(SchedulerTest, OneShotTaskIsDoneAfterExceptionAndSchedulerKeepsWorking) {
     RunCounter thrown(1);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     const TaskId id = scheduler.scheduleOnce(0ms, [&] {
         thrown.hit();
@@ -488,7 +494,7 @@ TEST(SchedulerTest, OneShotTaskIsDoneAfterExceptionAndSchedulerKeepsWorking) {
 
 TEST(SchedulerTest, PeriodicWithNonPositiveIntervalThrows) {
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     EXPECT_THROW(scheduler.schedulePeriodic(0ms, [] {}), std::invalid_argument);
     EXPECT_THROW(scheduler.schedulePeriodic(-1ms, [] {}), std::invalid_argument);
@@ -496,7 +502,7 @@ TEST(SchedulerTest, PeriodicWithNonPositiveIntervalThrows) {
 
 TEST(SchedulerTest, EmptyTaskThrows) {
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     EXPECT_THROW(scheduler.scheduleOnce(0ms, Scheduler::Task{}), std::invalid_argument);
     EXPECT_THROW(scheduler.schedulePeriodic(kShortInterval, Scheduler::Task{}), std::invalid_argument);
@@ -505,7 +511,7 @@ TEST(SchedulerTest, EmptyTaskThrows) {
 TEST(SchedulerTest, RejectedArgumentsDoNotScheduleAnything) {
     int runs{0};
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
 
     EXPECT_THROW(scheduler.schedulePeriodic(0ms, [&] { ++runs; }), std::invalid_argument);
     EXPECT_THROW(scheduler.scheduleOnce(0ms, Scheduler::Task{}), std::invalid_argument);
@@ -524,7 +530,7 @@ TEST(SchedulerTest, DestructorDoesNotWaitForTasksInTheHeapAndTheyNeverRun) {
     ThreadPool pool(kSingleWorker);
 
     {
-        Scheduler scheduler(pool);
+        Scheduler scheduler(pool, realTime);
         scheduler.scheduleOnce(kNever, [&] { ++runs; });
         scheduler.schedulePeriodic(kNever, [&] { ++runs; });
     }  // a destructor that waited for the due time would hang here until the ctest timeout
@@ -538,7 +544,7 @@ TEST(SchedulerTest, DestructorOfIdleSchedulerDoesNotHang) {
 
     // Covers both a scheduler thread that already waits on the empty heap and one that has not started yet.
     for (int i = 0; i < 100; ++i) {
-        Scheduler scheduler(pool);
+        Scheduler scheduler(pool, realTime);
     }
 }
 
@@ -549,7 +555,7 @@ TEST(SchedulerTest, TasksAlreadySubmittedToThePoolRunToCompletionAfterTheSchedul
     WorkerBlocker blocker(pool);
 
     {
-        Scheduler scheduler(pool);
+        Scheduler scheduler(pool, realTime);
         scheduler.scheduleOnce(0ms, [&] { ++onceRuns; });
         scheduler.schedulePeriodic(kShortInterval, [&] { ++periodicRuns; });
         // The one-shot task is dispatched first, so two queued entries mean that the first tick of the periodic task is queued as well.
@@ -572,7 +578,7 @@ TEST(SchedulerTest, CallbackMayScheduleAndCancelOtherTasks) {
     RunCounter innerOnceRuns(1);
     RunCounter innerPeriodicRuns(2);
     ThreadPool pool(kSingleWorker);
-    Scheduler scheduler(pool);
+    Scheduler scheduler(pool, realTime);
     const TaskId never = scheduler.scheduleOnce(kNever, [] {});
 
     std::promise<TaskId> innerPeriodicId;
@@ -609,7 +615,7 @@ TEST(SchedulerTest, ConcurrentScheduleAndCancelFromManyThreads) {
 
     {
         ThreadPool pool(kBusyPoolWorkers);
-        Scheduler scheduler(pool);
+        Scheduler scheduler(pool, realTime);
         {
             std::vector<std::jthread> producers;
             for (std::size_t t = 0; t < kThreads; ++t) {

@@ -5,7 +5,7 @@ Reusable C++20 concurrency primitives. No dependencies on sysmon domain types - 
 ## Components
 
 - **`ThreadPool`** - fixed-size pool of worker threads, FIFO task dispatch, returns `std::future<T>` per submitted callable.
-- **`Scheduler`** - dispatches one-shot and periodic tasks to an injected `ThreadPool` at configured times.
+- **`Scheduler`** - dispatches one-shot and periodic tasks to an injected `ThreadPool` at configured times. The time source is injected as well, `SteadyTimeSource` is the implementation for real time and tests can pass a fake.
 
 ## Quick Start
 
@@ -30,7 +30,7 @@ scheduler.cancel(id);
 
 ## Tests
 
-The tests of both components run against real threads. The `Scheduler` tests are integration tests: they use a real `ThreadPool` and the real `steady_clock` with short intervals, because neither is injectable yet. Unit tests with a fake clock and a fake executor are planned once both can be injected.
+The tests of both components run against real threads. The `Scheduler` tests in `SchedulerTest.cpp` are integration tests: they use a real `ThreadPool` and the real `steady_clock` with short intervals. The time is injectable now (`TimeSource`), with a fake time source in `tests/support/`. Moving the tests to it is planned, `SchedulerInjectionTest.cpp` only checks the injection itself.
 
 Tests never synchronize with sleeps, they wait on latches, futures and gates. Times are only checked against lower bounds, so a slow CI machine can delay a test but not make it fail. A hang caused by a bug is turned into a failure by the ctest timeout. The test targets are built with ASan and UBSan by default, and with TSan in the `tsan` preset, see [docs/build.md](../../docs/build.md) for the commands and the `setarch -R` note for WSL2. In the single-worker tests the variables shared with callbacks are deliberately plain and not atomic, so that TSan checks the ordering that the futures and gates provide. The conventions are written down at the top of `SchedulerTest.cpp`.
 
@@ -52,9 +52,9 @@ What the tests cover, by topic:
 ### Known gaps
 
 - `DISABLED_PeriodicTaskDoesNotBurstAfterThePoolWasBlocked` documents a deviation from the described catch-up behaviour. While the pool is blocked, the scheduler thread keeps dispatching, so every missed tick ends up as its own queued run and all of them execute back to back once the pool is released. The test is disabled until the behaviour is decided.
-- The arithmetic that skips missed slots after a delayed scheduler thread cannot be tested deterministically without an injectable clock.
-- The `catch` around `pool.submit()` in the scheduler thread, which drops a tick if `submit()` throws, is not tested, because the real `ThreadPool` cannot be made to throw. It needs an injectable executor.
-- That `cancel()` prevents the run of a one-shot task that is not yet due is not tested, because a short delay would make the test depend on how fast the test thread reaches `cancel()`.
+- The arithmetic that skips missed slots after a delayed scheduler thread is not tested yet. It can be tested deterministically with the injectable clock, which is planned.
+- The `catch` around `pool.submit()` in the scheduler thread, which drops a tick if `submit()` throws, is not tested yet, because the real `ThreadPool` cannot be made to throw. It needs an injectable executor.
+- That `cancel()` prevents the run of a one-shot task that is not yet due is not tested yet, because a short delay would make the test depend on how fast the test thread reaches `cancel()`. With the fake clock it can be tested deterministically, which is planned.
 
 ### Test helpers
 

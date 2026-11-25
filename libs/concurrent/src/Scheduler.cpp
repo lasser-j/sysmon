@@ -5,20 +5,20 @@
 
 namespace concurrent {
 
-Scheduler::Scheduler(ThreadPool& pool)
-    : m_pool(pool), m_thread([this](std::stop_token stopToken) { schedulerLoop(stopToken); }) {}
+Scheduler::Scheduler(ThreadPool& pool, TimeSource& timeSource)
+    : m_pool(pool), m_timeSource(timeSource), m_thread([this](std::stop_token stopToken) { schedulerLoop(stopToken); }) {}
 
 Scheduler::~Scheduler() {
     // Explicit for clarity; the jthread destructor would do the same.
     m_thread.request_stop();
 }
 
-TaskId Scheduler::scheduleOnce(const Clock::duration delay, Task task) {
-    return add(delay, Clock::duration::zero(), std::move(task));
+TaskId Scheduler::scheduleOnce(const TimeSource::Duration delay, Task task) {
+    return add(delay, TimeSource::Duration::zero(), std::move(task));
 }
 
-TaskId Scheduler::schedulePeriodic(const Clock::duration interval, Task task) {
-    if (interval <= Clock::duration::zero()) {
+TaskId Scheduler::schedulePeriodic(const TimeSource::Duration interval, Task task) {
+    if (interval <= TimeSource::Duration::zero()) {
         throw std::invalid_argument("Scheduler: periodic interval must be positive");
     }
     return add(interval, interval, std::move(task));
@@ -36,7 +36,7 @@ bool Scheduler::cancel(const TaskId id) {
     return true;
 }
 
-TaskId Scheduler::add(const Clock::duration firstDelay, const Clock::duration interval, Task task) {
+TaskId Scheduler::add(const TimeSource::Duration firstDelay, const TimeSource::Duration interval, Task task) {
     if (!task) {
         throw std::invalid_argument("Scheduler: task must not be empty");
     }
@@ -46,7 +46,7 @@ TaskId Scheduler::add(const Clock::duration firstDelay, const Clock::duration in
         id = m_nextId++;
         auto state = std::make_shared<TaskState>(id, std::move(task), interval);
         m_active.emplace(id, state);
-        m_heap.push(Entry{Clock::now() + firstDelay, std::move(state)});
+        m_heap.push(Entry{m_timeSource.now() + firstDelay, std::move(state)});
     }
     m_cv.notify_one();
     return id;
@@ -59,14 +59,14 @@ void Scheduler::schedulerLoop(const std::stop_token stopToken) {
             std::unique_lock lock(m_mutex);
             dropCancelledTop();
             if (m_heap.empty()) {
-                m_cv.wait(lock, stopToken, [this] { return !m_heap.empty(); });
+                m_timeSource.wait(m_cv, lock, stopToken, [this] { return !m_heap.empty(); });
                 continue;
             }
-            const Clock::time_point deadline = m_heap.top().nextRun;
-            const Clock::time_point now = Clock::now();
+            const TimeSource::TimePoint deadline = m_heap.top().nextRun;
+            const TimeSource::TimePoint now = m_timeSource.now();
             if (deadline > now) {
                 // Wakes early only if an entry with an earlier run time was added. Timeout and stop are handled by the loop condition and the clock check above.
-                m_cv.wait_until(lock, stopToken, deadline, [this, deadline] { return !m_heap.empty() && m_heap.top().nextRun < deadline; });
+                m_timeSource.waitUntil(m_cv, lock, stopToken, deadline, [this, deadline] { return !m_heap.empty() && m_heap.top().nextRun < deadline; });
                 continue;
             }
             collectDue(now, due);
@@ -93,7 +93,7 @@ void Scheduler::dropCancelledTop() {
     }
 }
 
-void Scheduler::collectDue(const Clock::time_point now, std::vector<std::shared_ptr<TaskState>>& due) {
+void Scheduler::collectDue(const TimeSource::TimePoint now, std::vector<std::shared_ptr<TaskState>>& due) {
     while (!m_heap.empty() && m_heap.top().nextRun <= now) {
         // top() returns a const reference, so the entry cannot be moved out and is copied instead.
         // The copy is cheap because an Entry only holds a time point and a shared_ptr, so just the pointer and its reference count are copied.
@@ -103,9 +103,9 @@ void Scheduler::collectDue(const Clock::time_point now, std::vector<std::shared_
         if (entry.state->stopSource.stop_requested()) {
             continue;
         }
-        if (entry.state->interval > Clock::duration::zero()) {
+        if (entry.state->interval > TimeSource::Duration::zero()) {
             // Computed from the planned start, not from now, so that dispatch latency does not accumulate as drift.
-            Clock::time_point next = entry.nextRun + entry.state->interval;
+            TimeSource::TimePoint next = entry.nextRun + entry.state->interval;
             if (next <= now) {
                 // Missed slots are skipped, the next run is the first slot after now.
                 next += ((now - next) / entry.state->interval + 1) * entry.state->interval;

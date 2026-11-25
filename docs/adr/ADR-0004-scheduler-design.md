@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10
+**Revised:** 2026-11
 
 ## Context
 
@@ -15,13 +16,13 @@ Add `submitPeriodic(interval, callback)` directly to `ThreadPool`.
 
 ## Decision
 
-**Option B - Separate `Scheduler` class** with `ThreadPool` injected by reference.
+**Option B - Separate `Scheduler` class** with `ThreadPool` and `TimeSource` injected by reference.
 
 ## Rationale
 
 **Single Responsibility:** `ThreadPool` manages worker threads and executes callables. Timing logic is a distinct concern. Mixing them would make `ThreadPool` harder to test and benchmark in isolation.
 
-**Testability:** `Scheduler` can be tested against a real `ThreadPool` independently. `ThreadPool` benchmarks remain unaffected by scheduling complexity.
+**Testability:** `Scheduler` can be tested against a real `ThreadPool` independently, and with a fake time source deterministically (see "Injection of time"). `ThreadPool` benchmarks remain unaffected by scheduling complexity.
 
 **Flexibility:** Callers may use `ThreadPool` without scheduling, or compose a different timing strategy on top of the same pool.
 
@@ -47,14 +48,23 @@ Scheduler min-heap → (when due) → pool.submit() → ThreadPool FIFO → work
 ### Public API
 
 - `Scheduler` is neither copyable nor movable.
-- `Task` is `ThreadPool::Task`, `Clock` is `std::chrono::steady_clock`, and `using TaskId = std::uint64_t` - ids are unique and never reused.
-- `TaskId scheduleOnce(Clock::duration delay, Task task)` - runs once after `delay`. A zero or negative delay means "due immediately". An empty task throws `std::invalid_argument`.
-- `TaskId schedulePeriodic(Clock::duration interval, Task task)` - the first run happens one `interval` after the call. Callers who want an immediate first run also call `scheduleOnce` with a zero delay. A zero or negative interval and an empty task throw `std::invalid_argument`.
+- `Task` is `ThreadPool::Task`, time points and durations are the `TimeSource::TimePoint` and `TimeSource::Duration`, and `TaskId` is `std::uint64_t`. Ids are unique and never reused.
+- `Scheduler(ThreadPool& pool, TimeSource& timeSource)` dispatches to the pool and takes its time and waiting from the time source. There is no default, the caller passes a `SteadyTimeSource` for real time.
+- `TaskId scheduleOnce(TimeSource::Duration delay, Task task)` - runs once after `delay`. A zero or negative delay means "due immediately". An empty task throws `std::invalid_argument`.
+- `TaskId schedulePeriodic(TimeSource::Duration interval, Task task)` - the first run happens one `interval` after the call. Callers who want an immediate first run also call `scheduleOnce` with a zero delay. A zero or negative interval and an empty task throw `std::invalid_argument`.
 - `bool cancel(TaskId id)` - returns `true` if the task was still active, i.e. a one-shot task that was not dispatched yet or a periodic task that was not cancelled yet (a periodic task stays active after each dispatch). Returns `false` for unknown ids, for already cancelled tasks and for one-shot tasks that were already dispatched.
+
+### Injection of time
+
+The scheduler does not read the clock itself. A `TimeSource` provided by the caller supplies the time and the waiting, which keeps the timing logic independent of the real clock.
+
+`TimeSource` is a small virtual interface with `now()`, `wait()` and `waitUntil()`, and `SteadyTimeSource` is the implementation for real time. The waiting is part of the interface because a real wait ends only after real time has passed. An implementation that controls the time, such as a fake, therefore has to do the waiting itself and wake the scheduler thread when its time reaches a deadline. Because every wait goes through it, a fake also sees when the scheduler thread has gone idle, so the scheduler needs no hook for tests. A virtual interface was chosen over a template parameter, because `Scheduler` stays a normal class with its code in the `.cpp` file, and one virtual call per wake-up is irrelevant at the low scheduling rate (see ADR-0002).
+
+The time source is a required constructor parameter without a default, like the pool, and a non-owning reference that must outlive the scheduler. With a default, a test that forgot to pass its fake would silently run on real time and become slow or flaky instead of failing to compile. The cost is one `SteadyTimeSource` next to every scheduler that runs on real time, e.g. a member of `MonitorCore` that is declared before the scheduler.
 
 ### Scheduler loop
 
-The scheduler thread is a `std::jthread` that waits on a `std::condition_variable_any` using the `std::stop_token` overloads of `wait` and `wait_until` (see ADR-0003).
+The scheduler thread is a `std::jthread` that waits on a `std::condition_variable_any` using the `std::stop_token` overloads of `wait` and `wait_until` (see ADR-0003). Both calls go through the `TimeSource`, which for real time forwards them to the condition variable.
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'stepAfter'}}}%%
@@ -109,10 +119,10 @@ The pool wrapper catches all exceptions from the callback and discards them. A p
 
 ### Shutdown and lifetime
 
-- `Scheduler` holds a non-owning reference to `ThreadPool`. `ThreadPool` must outlive `Scheduler`, otherwise the behaviour is undefined. In `MonitorCore` this is enforced by declaration order.
+- `Scheduler` holds non-owning references to the `ThreadPool` and the `TimeSource`. Both must outlive `Scheduler`, otherwise the behaviour is undefined. In `MonitorCore` this is enforced by declaration order.
 - The destructor requests stop and joins the scheduler thread before any other member is destroyed. Entries that are still in the heap are discarded and never run.
 - Stop is checked before every `pool.submit()`, so the scheduler never submits once its destruction has begun. This also keeps the rule of `ThreadPool::submit()` ("must not be called once destruction has begun") intact.
-- Tasks that were already submitted keep running after `~Scheduler`. This is safe because the wrapper holds only the shared `TaskState`. The `ThreadPool` drains its queue on destruction (see below), so those tasks complete before the pool is gone.
+- Tasks that were already submitted keep running after `~Scheduler`. This is safe because the wrapper holds only the shared `TaskState`. The `ThreadPool` drains its queue on destruction (see below), so those tasks complete before the pool is gone. A callback that captures the scheduler itself, for example to call `cancel()`, therefore must not run after the scheduler is destroyed. The wrapper cannot protect against this, and the caller has to make sure that such a callback is finished or cancelled before the scheduler goes away.
 
 ## ThreadPool shutdown semantics
 
@@ -123,4 +133,5 @@ The `ThreadPool` executes all queued tasks on destruction instead of discarding 
 - Dispatch latency depends on the load of the shared pool. The timing is "at the earliest at the planned time", with jitter if all workers are busy.
 - Slow periodic tasks lose ticks instead of overlapping. Callers do not need to make callbacks reentrant.
 - Individual tasks cannot be interrupted once running. Cooperative cancellation would need a task signature with a `std::stop_token` parameter, which is a possible later extension together with a discarding shutdown mode for the pool.
-- The clock is not injectable. Tests use real short intervals with latches and futures instead of sleeps.
+- The time is injectable. Tests with a fake time source are deterministic, integration tests use the real clock and the real pool with short intervals, latches and futures instead of sleeps.
+- The waiting of the scheduler thread runs through the `TimeSource`, so the real `SteadyTimeSource` is only covered by the integration tests.

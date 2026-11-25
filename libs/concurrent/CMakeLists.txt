@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.25)
 set(CONCURRENT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadPool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SteadyTimeSource.cpp
 )
 
 add_library(concurrent STATIC ${CONCURRENT_SOURCES})
